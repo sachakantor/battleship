@@ -5,7 +5,7 @@
 class Elemento {
 	public:
 						Elemento(int id, int nuevo_tamanio);
-						~Elemento();
+		virtual			~Elemento();
 		virtual int		tocar(int s_id);
 		bool			es_mismo_jugador(int s_id);
 		bool			hundido();
