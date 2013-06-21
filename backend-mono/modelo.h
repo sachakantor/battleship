@@ -4,8 +4,9 @@
 #include <string>
 #include <jugador.h>
 #include <queue>
-
+#include <RWLock.h>
 #include <sys/time.h>
+
 
 typedef struct tiro {
 	int				t_id;		/* a que jugador se hizo el tiro */
@@ -60,17 +61,19 @@ class Modelo {
 		void	print();
 #endif
 	private:
-		int						cantidad_jugadores;				/* cantidad de jugadores inscriptos */
-		Jugador					**jugadores;					/* Jugadores */
-		tiro_t					**tiros;						/* estado de los tiros */
-		std::queue<evento_t*>	*eventos;						/* arreglo de colas de eventos por jugador */
+	
+	int cantidad_jugadores;		/* cantidad de jugadores inscriptos */
+	Jugador	**jugadores;		/* Jugadores */
+	tiro_t	**tiros;		/* estado de los tiros */
+	RWLock **rw_locks;		/*lista de rw locks para jugadores*/
+	std::queue<evento_t*>	*eventos;		/* arreglo de colas de eventos por jugador */
 
-		bool					jugando;						/* si se esta jugando (fase tiroteo) o ubicando */
-		bool					es_posible_tocar(tiro_t *);		/* verifica si se cumplio el eta */
-		bool					es_posible_apuntar(tiro_t *);	/* verifica si se cumplio el eta */
+	bool jugando;				/* si se esta jugando (fase tiroteo) o ubicando */
+	bool es_posible_tocar(tiro_t *);		/* verifica si se cumplio el eta */
+	bool es_posible_apuntar(tiro_t *);	/* verifica si se cumplio el eta */
 	
 	
-		friend class	Jsonificador;					/* para poder acceder a los elementos */
+	friend classJsonificador;	/* para poder acceder a los elementos */
 	
 };
 

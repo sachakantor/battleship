@@ -5,15 +5,20 @@
 #include <constantes.h>
 #include <globales.h> 
 #include <stdlib.h>
+#include <RWLock.h>
 
 Modelo::Modelo(int njugadores, int tamtablero, int tamtotalbarcos){
 	max_jugadores = njugadores;
 	tamanio_tablero = tamtablero;
 	tamanio_total_barcos = tamtotalbarcos;
 	
+
+	
 	this->jugadores = new Jugador*[max_jugadores];
 	this->eventos = new std::queue<evento_t *>[max_jugadores];
 	this->tiros = new tiro_t*[max_jugadores];
+	this->rw_locks = new RWLock*[max_jugadores];
+
 	for (int i = 0; i < max_jugadores; i++) {
 		this->jugadores[i] = NULL;
 		this->tiros[i] = NULL;
@@ -31,6 +36,7 @@ Modelo::~Modelo() {
 	}
 	delete[] this->jugadores;
 	delete[] this->tiros;
+	delete[] this->rw_locks;
 }
 
 int Modelo::agregarJugador(std::string nombre) {
@@ -93,6 +99,8 @@ error Modelo::empezar() {
 	return ERROR_NO_ERROR;
 	
 }
+
+
 error Modelo::reiniciar() {
 	for (int i = 0; i < max_jugadores; i++) {
 		if (this->jugadores[i] != NULL) {
@@ -107,7 +115,7 @@ error Modelo::reiniciar() {
 	this->jugando = false;
 	
 	return ERROR_NO_ERROR;
-	
+
 }
 
 error Modelo::quitarJugador(int s_id) {
@@ -126,6 +134,20 @@ int Modelo::apuntar(int s_id, int t_id, int x, int y, int *eta) {
 	if (!this->jugando) return -ERROR_JUEGO_NO_COMENZADO;
 	if (this->jugadores[s_id] == NULL) return -ERROR_JUGADOR_INEXISTENTE;
 	if (this->jugadores[t_id] == NULL) return -ERROR_JUGADOR_INEXISTENTE;
+
+	// aca deberia lockear los dos
+	// hago el if para pedirlos en orden y evitar dlock
+	if(s_id < t_id)
+	{
+		this->rw_locks[s_id].wlock();
+		this->rw_locks[t_id].wlock();
+	}
+	else	
+	{
+		this->rw_locks[t_id].wlock();
+		this->rw_locks[s_id].wlock();
+	}
+
 	if (! this->jugadores[s_id]->esta_vivo()) return -ERROR_JUGADOR_HUNDIDO;
 	int retorno = RESULTADO_APUNTADO_DENEGADO;
 	if (this->es_posible_apuntar(this->tiros[s_id])) {
@@ -148,7 +170,11 @@ int Modelo::apuntar(int s_id, int t_id, int x, int y, int *eta) {
 			this->eventos[t_id].push(nuevoevento);
 		}
 	}
-	
+
+
+	this->rw_locks[t_id].wunlock();
+	this->rw_locks[s_id].wunlock();
+		
 	return retorno;
 	
 }
@@ -156,8 +182,15 @@ int Modelo::apuntar(int s_id, int t_id, int x, int y, int *eta) {
 int Modelo::dame_eta(int s_id) {
 	if (!this->jugando) return -ERROR_JUEGO_NO_COMENZADO;
 	if (this->jugadores[s_id] == NULL) return -ERROR_JUGADOR_INEXISTENTE;
+
+	//bloqueo al jugadore para lectura
+	this->rw_locks[s_id].rlock();
+
 	tiro_t * tiro = this->tiros[s_id];
 	if (tiro->estado != TIRO_APUNTADO) return -ERROR_ESTADO_INCORRECTO;
+	
+	//libero el jugador s_id
+	this->rw_locks[s_id].runlock();
 
 	return tiro->eta;
 }
@@ -167,7 +200,19 @@ int Modelo::tocar(int s_id, int t_id) {
 	if (this->jugadores[s_id] == NULL) return -ERROR_JUGADOR_INEXISTENTE;
 	if (this->jugadores[t_id] == NULL) return -ERROR_JUGADOR_INEXISTENTE;
 
-	
+	// aca deberia lockear los dos
+	// hago el if para pedirlos en orden y evitar dlock
+	if(s_id < t_id)
+	{
+		this->rw_locks[s_id].wlock();
+		this->rw_locks[t_id].wlock();
+	}
+	else	
+	{
+		this->rw_locks[t_id].wlock();
+		this->rw_locks[s_id].wlock();
+	}
+
 	int retorno = -ERROR_ETA_NO_TRANSCURRIDO;
 	if (this->es_posible_tocar(this->tiros[s_id])) {
 		int x = this->tiros[s_id]->x;
@@ -208,6 +253,13 @@ int Modelo::tocar(int s_id, int t_id) {
 			this->jugadores[s_id]->agregar_puntaje(PUNTAJE_MAGALLANES);
 		} 
 	}
+
+
+	//libero s_id y t_id
+	this->rw_locks[t_id].wunlock();
+	this->rw_locks[s_id].wunlock();
+
+
 	return retorno;
 }
 
