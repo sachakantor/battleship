@@ -21,7 +21,7 @@ public:
 	std::string     decodificar(const char * mensaje);
     int             dameIdJugador(const char * mensaje);
 	std::string		encodeEvent(int s_id);
-	
+
 private:
 	Modelo			*modelo;
 	Json::Reader	reader;

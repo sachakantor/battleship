@@ -26,7 +26,7 @@ class Jugador {
 		Tablero * 		tablero;					/* tablero del jugador */
 		int				puntaje;					/* puntaje del jugador */
 		int				cantidad_barcos_flotando;	/* cantidad de barcos del jugador */
-	
+
 		friend class	Jsonificador;					/* para poder acceder a los elementos */
 
 };

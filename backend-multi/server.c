@@ -46,7 +46,7 @@ int s_controladores[MAX_CONTROLADORES];		// Sockets de los controladores
 int ids[MAX_JUGADORES];				// Ids de los jugadores
 Modelo * model = NULL;				// Puntero al modelo del juego
 Decodificador *decoder  = NULL;		// Puntero al decodificador
-int n, tamanio, tamanio_barcos;		// Variables de configuracion del juego.
+int n, tamanio, tamanio_barcos;     // Variables de configuracion del juego.
 
 
 /* Resetea el juego */
@@ -96,6 +96,7 @@ void atender_controlador(int sock_i) {
 			//Ejecutar y responder
 			resp = decoder->decodificar(pch);
 			send(s_controladores[sock_i],resp.c_str(), resp.length() +1, 0);
+            pch = strtok(NULL, "|");
             pch = strtok(NULL, "|");
 		}
 	}
@@ -222,8 +223,6 @@ void* controller_manager(void* param){
 }
 
 
-
-
 /*
  * Recibe 4 parametros:
  * argv[1]: Puerto
@@ -254,14 +253,13 @@ int main(int argc, char * argv[]) {
 	printf("Jugadores %d - Tamanio %d - Tamanio Barcos %d\n", n, tamanio, tamanio_barcos);
 	reset();
 
-
-
 	/*	Comienza inicializacion del socket para el controlador	*/
 	sock_controlador = socket(AF_INET, SOCK_STREAM, 0);
 	if (sock_controlador < 0) {
 		perror("abriendo socket");
 		exit(1);
 	}
+	//struct sockaddr_in name_controlador; //LO AGREGE AL MERGEAR PUES NO SABIA PORQUE NO IBA
 	/* Crear nombre, usamos INADDR_ANY para indicar que cualquiera puede enviar aquí. */
 	name_controlador.sin_family = AF_INET;
 	name_controlador.sin_addr.s_addr = INADDR_ANY;
@@ -282,10 +280,6 @@ int main(int argc, char * argv[]) {
 	pthread_create(&thread_controlador, NULL, controller_manager, NULL);
 	
 	/*	Finaliza inicializacion del socket para el controlador	*/
-
-
-
-
 
 	/* Crear socket sobre el que se lee: dominio INET, protocolo TCP (STREAM). */
 	sock = socket(AF_INET, SOCK_STREAM, 0);

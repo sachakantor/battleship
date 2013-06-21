@@ -31,7 +31,7 @@ Modelo::Modelo(const int njugadores, const int tamtablero, const int tamtotalbar
 	for (int i = 0; i < max_jugadores; i++) {
 		this->jugadores[i] = NULL;
 		this->tiros[i] = NULL;
-        this->locks[i] = NULL;
+        this->locks[i] = new Modelo::locks_t(); //NULL;
 	}
 	this->cantidad_jugadores = 0;
 	this->jugando = false;
@@ -43,13 +43,8 @@ Modelo::Modelo(const int njugadores, const int tamtablero, const int tamtotalbar
     this->rwl_locks = new RWLock();
     this->rwl_jugando = new RWLock();
     this->rwl_cantidad_jugadores = new RWLock();
-
-	for (int i = 0; i < max_jugadores; i++) {
-		this->locks[i] = new Modelo::locks_t();
-	}		
-
-
 }
+
 Modelo::~Modelo() {
 	for (int i = 0; i < max_jugadores; i++) {
 		if (this->jugadores[i] != NULL) {
@@ -92,6 +87,7 @@ int Modelo::agregarJugador(std::string nombre) {
             this->rwl_cantidad_jugadores->wlock();
             this->rwl_tiros->wlock();
             this->rwl_locks->wlock();
+            //this->locks[nuevoid] = new Modelo::locks_t();
             this->locks[nuevoid]->rwl_tiros->wlock();
 
             //Registro al jugador

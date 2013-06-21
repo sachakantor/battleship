@@ -10,9 +10,9 @@
 #include <cstdlib>
 #include <decodificador.h>
 #include <constantes.h>
-#include <globales.h> 
+#include <globales.h>
 
-using namespace std; 
+using namespace std;
 
 Decodificador::Decodificador(Modelo *mod) {
     this->modelo = mod;
@@ -85,7 +85,7 @@ std::string Decodificador::setup() {
 	int boatsize;
 	int xs[MAX_BOAT_SIZE];
 	int ys[MAX_BOAT_SIZE];
-	
+
 	for (int i = 0; i < nboats && retorno == ERROR_NO_ERROR; i++) {
 		boatsize = this->root["Data"]["boats"][i].size();
 		for (int j = 0; j < boatsize; j++) {
@@ -98,7 +98,7 @@ std::string Decodificador::setup() {
 	if (retorno != ERROR_NO_ERROR) {
 		this->modelo->borrar_barcos(this->root["Data"]["s_id"].asInt());
 	}
-	
+
 	if (this->modelo->empezar() == ERROR_NO_ERROR) {
 		printf("Empezando el juego\n");
 	}

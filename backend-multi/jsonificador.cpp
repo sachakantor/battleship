@@ -12,7 +12,7 @@ Jsonificador::Jsonificador(Modelo * mod) {
 }
 
 Jsonificador::~Jsonificador() {
-	
+
 }
 
 
@@ -43,7 +43,14 @@ std::string Jsonificador::error(int err) {
 }
 
 std::string Jsonificador::start() {
+    //Variables locales
 	std::stringstream ss;
+
+    //Pido locks
+    this->modelo->rwl_jugadores->rlock();
+    this->modelo->rwl_locks->rlock();
+
+    //Comenzamos
 	ss << "{ \"Name\": \"Start\", \"Data\": [";
 	bool primero = true;
 	for (int i = 0; i < max_jugadores; i++) {
@@ -51,20 +58,41 @@ std::string Jsonificador::start() {
 			if (!primero) {
 				ss << ",";
 			}
+            //Pido lock sabiendo el indice
+            this->modelo->locks[i]->rwl_jugadores->rlock();
+
 			ss << "{\"Id\":" << i << ", \"Name\": \""<< this->modelo->jugadores[i]->dame_nombre() << "\"}";
 			if (primero) {
 				primero = false;
 			}
+
+            //Suelto el lock pedido en esta instancia
+            //pues no lo necesitare mas
+            this->modelo->locks[i]->rwl_jugadores->runlock();
 		}
 	}
 	ss << "]}|";
+
+    //Suelto los locks
+    this->modelo->rwl_locks->runlock();
+    this->modelo->rwl_jugadores->runlock();
+
+    //Finalizo
 	return ss.str();
 }
 
 
 
 std::string Jsonificador::player_info(int id) {
+    //Variables locales
 	std::stringstream ss;
+
+    //Pido locks
+    this->modelo->rwl_jugadores->rlock();
+    this->modelo->rwl_locks->rlock();
+    this->modelo->locks[id]->rwl_jugadores->rlock();
+
+    //Comenzamos
 	Tablero * tab = this->modelo->jugadores[id]->tablero;
 	int st;
 	Casilla * cas;
@@ -83,11 +111,16 @@ std::string Jsonificador::player_info(int id) {
 		}
 		ss << "]";
 	}
-	
+
 	ss <<"]}}|";
+
+    //Suelto los locks
+    this->modelo->locks[id]->rwl_jugadores->runlock();
+    this->modelo->rwl_locks->runlock();
+    this->modelo->rwl_jugadores->runlock();
+
+    //Finalizo
 	return ss.str();
-	
-	
 }
 
 
@@ -115,7 +148,7 @@ std::string Jsonificador::update(evento_t * event) {
 		ss << "}}";
 	}
 	ss << "|";
-	
+
 	return ss.str();
 }
 
@@ -147,7 +180,7 @@ std::string Jsonificador::traducir_estado_casilla(int estado) {
 			retorno = "A";
 			break;
 	}
-	
+
 	return retorno;
 }
 
