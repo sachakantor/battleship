@@ -10,6 +10,7 @@ RWLock :: RWLock() {
     pthread_mutexattr_settype(&mutex_attr,PTHREAD_MUTEX_ERRORCHECK);
 
     //Inicializo las variables
+    pthread_cond_init(&this->c_no_readers,NULL);
     pthread_mutex_init(&this->m_readers_counter,&mutex_attr);
     pthread_mutex_init(&this->m_resource,&mutex_attr);
     this->readers_counter = 0;
@@ -22,7 +23,7 @@ void RWLock :: rlock() {
     /*Si estamos acá, seguro que no hay una escritura andando*/
     pthread_mutex_lock(&this->m_readers_counter);
     this->readers_counter++;
-    //this->no_readers = false;
+    assert(this->readers_counter > 0);
 
     /*Liberamos el recurso para que sigan entrando lecturas o escrituras*/
     pthread_mutex_unlock(&this->m_readers_counter);
@@ -35,12 +36,13 @@ void RWLock :: wlock() {
 
     /*Esperamos que terminen todas las lecturas actuales*/
     pthread_mutex_lock(&this->m_readers_counter);
-    while(this->readers_counter != 0) pthread_cond_wait(&this->c_no_readers,&this->m_readers_counter);
-    pthread_mutex_unlock(&this->m_readers_counter); /*ningun lector nuevo llegara a pedir este mutex,
+    while(this->readers_counter > 0) pthread_cond_wait(&this->c_no_readers,&this->m_readers_counter);
+    /*pthread_mutex_unlock(&this->m_readers_counter); *ningun lector nuevo llegara a pedir este mutex,
                                                      *pues aun tengo lockeado el m_resource, pero
                                                      *una lectura actual que termina debera tomarlo
                                                      *para decrementarlo.
                                                      */
+    assert(this->readers_counter == 0);
 }
 
 void RWLock :: runlock() {
@@ -65,6 +67,8 @@ void RWLock :: wunlock() {
     /*Asumimos que tenemos ya el mutex del recurso, que se hizo
      *en el wlock()
      */
+    assert(this->readers_counter == 0);
+    pthread_mutex_unlock(&this->m_readers_counter);
     pthread_mutex_unlock(&this->m_resource);
 }
 

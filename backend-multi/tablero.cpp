@@ -74,12 +74,12 @@ error Tablero::ubicar(int * xs, int * ys, int tamanio) {
 			}
 		}
 	}
-	
+
 	for (int i = 0; i < tamanio && aceptable; i++) {
 		aceptable = aceptable && xs[i] < this->tamanio && ys[i] < this->tamanio;
 	}
-	
-	
+
+
 	for (int i = 0; i < tamanio && aceptable; i++) {
 		x = xs[i];
 		y = ys[i];
@@ -89,27 +89,27 @@ error Tablero::ubicar(int * xs, int * ys, int tamanio) {
 		}
 		if (x > 0 && y > 0) {
 			aceptable = aceptable && this->casillas[traducir_cord(x-1, y-1)].dameId() == 0;	// Izquierda arriba
-		} 
+		}
 		if (x > 0) {
 			aceptable = aceptable && this->casillas[traducir_cord(x-1, y)].dameId() == 0;	// Izquierda
 		}
-		
+
 		if (x > 0 && y < (tamanio -1)) {
 			aceptable = aceptable && this->casillas[traducir_cord(x-1, y+1)].dameId() == 0;	// Izquierda abajo
-		} 
+		}
 		if (y < (tamanio -1)) {
 			aceptable = aceptable && this->casillas[traducir_cord(x, y+1)].dameId() == 0;	// Abajo
 		}
 		if (x < (tamanio -1) && y < (tamanio -1)) {
 			aceptable = aceptable && this->casillas[traducir_cord(x+1, y+1)].dameId() == 0;	// Derecha abajo
-		} 
+		}
 		if (x < (tamanio -1)) {
 			aceptable = aceptable && this->casillas[traducir_cord(x+1, y)].dameId() == 0;	// Derecha
 		}
-		
+
 		if (x < (tamanio -1) && y >0) {
 			aceptable = aceptable && this->casillas[traducir_cord(x+1, y-1)].dameId() == 0;	// Derecha arriba
-		} 
+		}
 	}
 	if (aceptable) {
 		this->ocupado_barcos += tamanio;
@@ -126,7 +126,7 @@ error Tablero::ubicar(int * xs, int * ys, int tamanio) {
 	return retorno;
 }
 
-inline 
+inline
 int	Tablero::traducir_cord(int x, int y) {
 	return x + y * this->tamanio;
 }

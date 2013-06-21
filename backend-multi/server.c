@@ -25,6 +25,7 @@
 
 #define MAX_MSG_LENGTH 4096
 #define MAX_JUGADORES 100
+#define MAX_CONTROLADORES 5
 
 /* Setea un socket como no bloqueante */
 int no_bloqueante(int fd) {
@@ -37,10 +38,11 @@ int no_bloqueante(int fd) {
 
 
 /* Variables globales del server */
-int sock;							// Socket donde se escuchan las conexiones entrantes
-struct sockaddr_in name; //remote;	// Direcciones
+int sock, sock_controlador;							// Socket donde se escuchan las conexiones entrantes
+struct sockaddr_in name, name_controlador; //remote;	// Direcciones
 char buf[MAX_MSG_LENGTH];			// Buffer de recepción de mensajes
 int s[MAX_JUGADORES];				// Sockets de los jugadores
+int s_controladores[MAX_CONTROLADORES];		// Sockets de los controladores
 int ids[MAX_JUGADORES];				// Ids de los jugadores
 Modelo * model = NULL;				// Puntero al modelo del juego
 Decodificador *decoder  = NULL;		// Puntero al decodificador
@@ -80,13 +82,11 @@ void reset() {
 }*/
 
 
-/* Socket de comunicación del controlador */
-int s_controlador;
 /* Para anteder al controlador */
-void atender_controlador() {
+void atender_controlador(int sock_i) {
 	int recibido;
 	std::string resp;
-	recibido = recv(s_controlador, buf, MAX_MSG_LENGTH, 0);
+	recibido = recv(s_controladores[sock_i], buf, MAX_MSG_LENGTH, 0);
 	if (recibido < 0) {
 		perror("Recibiendo ");
 	} else if (recibido > 0) {
@@ -95,7 +95,8 @@ void atender_controlador() {
 		while (pch != NULL) {
 			//Ejecutar y responder
 			resp = decoder->decodificar(pch);
-			send(s_controlador,resp.c_str(), resp.length() +1, 0);
+			send(s_controladores[sock_i],resp.c_str(), resp.length() +1, 0);
+            pch = strtok(NULL, "|");
 		}
 	}
 }
@@ -167,6 +168,62 @@ void* thread_func(void* i){
     return NULL;
 }
 
+void* thread_func_controlador(void* i_cont){
+    while(true) atender_controlador((int)
+        #ifdef __x86_64__
+            //En caso de que estemos en una pc de 64 bits, para que no tire errores
+            //de distintos tamaños entre int y void*
+            (long int)
+        #endif
+        i_cont);
+	return NULL;
+}
+
+
+void* controller_manager(void* param){
+
+	int size_remote = sizeof(struct sockaddr_in);
+	bool sale = false;
+	//pthread_t thread_atencion_controlador;
+	int cant_controladores = 0;
+	pthread_t threads_controladores[MAX_CONTROLADORES];	
+	
+    //Comenzamos a aceptar conexiones
+    while(!sale && cant_controladores < MAX_CONTROLADORES){
+        //Por cada iteracion, genero una nueva direccion para la conexion
+        struct sockaddr_in remote_controlador;
+
+        //Por cada conexion recibida, configuramos un nuevo socket
+        s_controladores[cant_controladores] = accept(sock_controlador,(struct sockaddr*)&remote_controlador,(socklen_t*)&size_remote);
+		if (s_controladores[cant_controladores] == -1) {
+			perror("aceptando la conexión entrante");
+		} else {
+	            //Configuramos el socket
+        	    int flag = 1;
+	            setsockopt(s_controladores[cant_controladores],    /* socket affected */
+                    IPPROTO_TCP,                    /* set option at TCP level */
+                    TCP_NODELAY,                    /* name of option */
+                    (char *) &flag,                 /* the cast is historical */
+                    sizeof(int));                   /* length of option value */
+
+        	    //Creamos el thread
+	            pthread_create(&threads_controladores[cant_controladores], NULL, thread_func_controlador, 
+                    (void*)
+                        #ifdef __x86_64__
+                            //En caso de que estemos en una pc de 64 bits, para que no tire errores
+                            //de distintos tamaños entre int y void*
+                            (long)
+                        #endif
+                        cant_controladores );
+			cant_controladores++;
+		}
+	}
+	return NULL;
+}
+
+
+
+
 /*
  * Recibe 4 parametros:
  * argv[1]: Puerto
@@ -196,6 +253,37 @@ int main(int argc, char * argv[]) {
 	printf("Escuchando en el puerto %d - controlador en %d\n", port, port_controlador);
 	printf("Jugadores %d - Tamanio %d - Tamanio Barcos %d\n", n, tamanio, tamanio_barcos);
 	reset();
+
+
+
+	/*	Comienza inicializacion del socket para el controlador	*/
+	sock_controlador = socket(AF_INET, SOCK_STREAM, 0);
+	if (sock_controlador < 0) {
+		perror("abriendo socket");
+		exit(1);
+	}
+	/* Crear nombre, usamos INADDR_ANY para indicar que cualquiera puede enviar aquí. */
+	name_controlador.sin_family = AF_INET;
+	name_controlador.sin_addr.s_addr = INADDR_ANY;
+	name_controlador.sin_port = htons(port_controlador);
+	if (bind(sock_controlador, (const struct sockaddr*) &name_controlador, sizeof(name_controlador))) {
+		perror("binding socket");
+		exit(1);
+	}
+
+	/* Escuchar en el socket y permitir MAX_CONTROLADORES conexion en espera. */
+	if (listen(sock_controlador, MAX_CONTROLADORES) == -1) {
+		perror("escuchando");
+		exit(1);
+	}
+
+	pthread_t thread_controlador;
+	//Creamos el thread que va a escuchar y crear un thread para cada comunicacion
+	pthread_create(&thread_controlador, NULL, controller_manager, NULL);
+	
+	/*	Finaliza inicializacion del socket para el controlador	*/
+
+
 
 
 
@@ -253,7 +341,6 @@ int main(int argc, char * argv[]) {
                     TCP_NODELAY,                    /* name of option */
                     (char *) &flag,                 /* the cast is historical */
                     sizeof(int));                   /* length of option value */
-
 
             //Creamos el thread
             pthread_create(

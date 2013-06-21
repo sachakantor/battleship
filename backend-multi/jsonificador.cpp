@@ -157,6 +157,9 @@ std::string Jsonificador::scores() {
 	ss << "{ \"Name\": \"Scores\", \"Data\": [";
 	bool primero = true;
 	for (int i = 0; i < max_jugadores; i++) {
+        	this->modelo->rwl_jugadores->rlock();
+            	this->modelo->rwl_locks->rlock();
+		this->modelo->locks[i]->rwl_jugadores->rlock();
 		if (this->modelo->jugadores[i]!= NULL) {
 			if (!primero) {
 				ss << ",";
@@ -167,6 +170,9 @@ std::string Jsonificador::scores() {
 				primero = false;
 			}
 		}
+		this->modelo->locks[i]->rwl_jugadores->runlock();
+            	this->modelo->rwl_locks->runlock();
+        	this->modelo->rwl_jugadores->runlock();
 	}
 	ss << "]}|";
 	return ss.str();

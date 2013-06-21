@@ -7,6 +7,7 @@
 #include "RWLock.h"
 
 #include <sys/time.h>
+#include <pthread.h>
 
 typedef struct tiro {
 	int				t_id;		/* a que jugador se hizo el tiro */
@@ -27,7 +28,7 @@ typedef struct evento {
 
 class Modelo {
     public:
-        Modelo(int njugadores, int tamtablero, int tamtotalbarcos);
+        Modelo(const int njugadores,const int tamtablero,const int tamtotalbarcos);
         ~Modelo();
         int     agregarJugador(std::string nombre);		/* agrega el jugador y devuelve el id */
 
@@ -63,9 +64,14 @@ class Modelo {
 	private:
         //Struct privado para el manejo de locks
         typedef struct locks {
-            RWLock* rwlock_jugadores;
-            RWLock* rwlock_eventos;
-            RWLock* rwlock_tiros;
+            //Atributos
+            RWLock* rwl_jugadores;
+            RWLock* rwl_eventos;
+            RWLock* rwl_tiros;
+
+            //Constructor y destructor del struc
+            locks();
+            ~locks();
         } locks_t;
 
         //Atributos
@@ -79,6 +85,13 @@ class Modelo {
 		bool					es_posible_tocar(tiro_t *);		/* verifica si se cumplio el eta */
 		bool					es_posible_apuntar(tiro_t *);	/* verifica si se cumplio el eta */
 
+        //Read Write Locks (de paranoico)
+        RWLock* rwl_jugadores;
+        RWLock* rwl_tiros;
+        RWLock* rwl_eventos;
+        RWLock* rwl_locks;
+        RWLock* rwl_jugando;
+        RWLock* rwl_cantidad_jugadores;
 
 		friend class	Jsonificador;					/* para poder acceder a los elementos */
 
