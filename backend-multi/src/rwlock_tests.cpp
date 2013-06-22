@@ -1,9 +1,10 @@
 #include <stdio.h>
 #include <pthread.h>
-#include "RWLock.h"
+#include <RWLock.h>
 #include <stdlib.h>
 #include <time.h>
 #include <ctime>
+#include <unistd.h>
 
 //
 // Creamos el lock de lectura/escritura.
@@ -33,10 +34,10 @@ int main() {
 
   printf("\n   ***  PRUEBA 1: 5 lectores  ***\n");
   test1();
-  
+
   printf("\n   ***  PRUEBA 2: 5 escritores  ***\n");
   test2();
-  
+
   printf("\n   ***  PRUEBA 3: 3 lectores, 1 escritor, 2 lectores, 3 escritores, 1 lector  ***\n");
   test3();
 
@@ -55,12 +56,12 @@ void* reader(void* tid) {
   int id = *(int*) tid;
 
   printf("(%03ld segs)  HILO %i: obteniendo lock de LECTURA...\n", (time(NULL) - tiempo_inicio), id);
-  
+
   rwlock.rlock();
-  
+
   printf("(%03ld segs)  HILO %i: lock de LECTURA obtenido! Voy a mantenerlo durante %i segundo(s).\n", (time(NULL) - tiempo_inicio), id, t);
   sleep(t);
-  
+
   printf("(%03ld segs)  HILO %i: lock de LECTURA liberado!\n", (time(NULL) - tiempo_inicio), id);
   rwlock.runlock();
 
@@ -79,10 +80,10 @@ void* writer(void* tid) {
 
   printf("(%03ld segs)  HILO %i: lock de ESCRITURA obtenido! Voy a mantenerlo durante %i segundo(s).\n", (time(NULL) - tiempo_inicio), id, t);
   sleep(t);
-  
+
   printf("(%03ld segs)  HILO %i: lock de ESCRITURA liberado!\n", (time(NULL) - tiempo_inicio), id);
   rwlock.wunlock();
-  
+
   return NULL;
 }
 
@@ -121,7 +122,7 @@ void test2() {
   }
 
   for (tid = 0; tid < 5; ++tid)
-    pthread_join(thread_writers[tid], NULL);  
+    pthread_join(thread_writers[tid], NULL);
 }
 
 
@@ -141,18 +142,18 @@ void test3() {
   //
   // Escritores.
   //
-  pthread_t thread_writers[4];  
+  pthread_t thread_writers[4];
   pthread_t tids_writers[4];
   int cw = 0;
 
   for (tid = 0; tid < 6; ++tid) {
     tids_readers[tid] = tid;
   }
-  
+
   for (tid = 0; tid < 4; ++tid) {
     tids_writers[tid] = tid + 6;
   }
-  
+
   //
   // 3 lectores.
   //
@@ -160,7 +161,7 @@ void test3() {
   cr++;
   pthread_create(&thread_readers[cr], NULL, reader, &tids_readers[cr]);
   cr++;
-  pthread_create(&thread_readers[cr], NULL, reader, &tids_readers[cr]);  
+  pthread_create(&thread_readers[cr], NULL, reader, &tids_readers[cr]);
   cr++;
 
   //
@@ -168,7 +169,7 @@ void test3() {
   //
   pthread_create(&thread_writers[cw], NULL, writer, &tids_writers[cw]);
   cw++;
-  
+
   //
   // 2 lectores.
   //
@@ -176,7 +177,7 @@ void test3() {
   cr++;
   pthread_create(&thread_readers[cr], NULL, reader, &tids_readers[cr]);
   cr++;
-  
+
   //
   // 3 escritores.
   //
@@ -192,7 +193,7 @@ void test3() {
   //
   pthread_create(&thread_readers[cr], NULL, reader, &tids_readers[cr]);
   cr++;
-  
+
   for (tid = 0; tid < cr; ++tid) {
     pthread_join(thread_readers[tid], NULL);
   }
@@ -215,11 +216,11 @@ int get_rand()
 
 void test4() {
   int tid = 0;
-	
+
   //
   int cant_lectores = get_rand() % 100;
-  int cant_escritores = 100 - cant_lectores;	
-  
+  int cant_escritores = 100 - cant_lectores;
+
 
   //
   // Lectores.
@@ -231,14 +232,14 @@ void test4() {
   //
   // Escritores.
   //
-  pthread_t thread_writers[cant_escritores];  
+  pthread_t thread_writers[cant_escritores];
   pthread_t tids_writers[cant_escritores];
   int cw = 0;
 
   for (tid = 0; tid < cant_lectores; ++tid) {
     tids_readers[tid] = tid;
   }
-  
+
   for (tid = 0; tid < cant_escritores; ++tid) {
     tids_writers[tid] = tid + cant_lectores;
   }
@@ -248,12 +249,12 @@ void test4() {
 	/*agrego las llamadas aleatorias al arr*/
 	for (int i=0; i<100; i++)
 	{
-		
+
             int r = (get_rand() % 2); // Random; si es 0 hago lectura, sino escritura
 	    if(r == 0 && cant_lectores > 0)
 	    {
 		pthread_create(&thread_readers[cr], NULL, reader, &tids_readers[cr]);
-		cr++;		
+		cr++;
                 cant_lectores--;
 	    }
 	    else
@@ -267,14 +268,14 @@ void test4() {
 		else
 		{
 			pthread_create(&thread_readers[cr], NULL, reader, &tids_readers[cr]);
-			cr++;		
+			cr++;
 		        cant_lectores--;
 		}
 	    }
         }
 
 
-  
+
   for (tid = 0; tid < cr; ++tid) {
     pthread_join(thread_readers[tid], NULL);
   }

@@ -1,9 +1,10 @@
 CC = g++
-CFLAGS=-g -Wall -Werror
+#CFLAGS=-g -Wall -Werror 
+CFLAGS=-g -Wall -std=c++98 -Werror -fno-stack-protector -I../include
 LDFLAGS=-pthread
 
 BINARY=test
-JSONCPP=libs/jsoncpp/jsoncpp.a
+#JSONCPP=libs/jsoncpp/jsoncpp.a
 OBJECTS=RWLock.o
 
 .PHONY: clean all libs

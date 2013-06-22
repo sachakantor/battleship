@@ -4,7 +4,7 @@
 #include <string>
 #include <jugador.h>
 #include <queue>
-#include "RWLock.h"
+#include <RWLock.h>
 
 #include <sys/time.h>
 #include <pthread.h>

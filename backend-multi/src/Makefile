@@ -1,9 +1,9 @@
 CC = g++
-CFLAGS=-g -Wall -std=c++98 -Werror -fno-stack-protector -I./ -I./libs/jsoncpp/include
+CFLAGS=-g -Wall -std=c++98 -Werror -fno-stack-protector -I../include -I../libs/jsoncpp/include
 LDFLAGS=-pthread
 
 BINARY=server
-JSONCPP=libs/jsoncpp/jsoncpp.a
+JSONCPP=../libs/jsoncpp/jsoncpp.a
 OBJECTS=embarcacion.o elemento.o casilla.o tablero.o globales.o jugador.o modelo.o jsonificador.o decodificador.o RWLock.o
 
 .PHONY: clean all libs
@@ -17,7 +17,7 @@ $(BINARY): server.c $(OBJECTS) $(JSONCPP)
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 $(JSONCPP):
-	$(MAKE) -C libs/jsoncpp/src
+	$(MAKE) -C ../libs/jsoncpp/src
 
 clean:
 	rm -f $(OBJECTS)

@@ -21,7 +21,7 @@ jugador_nombre="${3}"
 game_started=false
 #comlog="${working_dir}/battlesystemClient.`tr -d [:space:] <<<${jugador_nombre}`.$$.log"
 modoUSA=false
-pids_USA=""
+compatriotas="${working_dir}/compatriotas.lst"
 
 #Variables que se iran cargando
 #al parsear las respuestas del server
@@ -91,6 +91,9 @@ function cleanup(){
     printf '\r\vCerrando procesos hijos\r\n' && pkill -P $$ 2>/dev/null
     printf 'Cerramos el fd\r\n' && exec {fd_output_server}>&-
     printf 'Borrando FIFOs\r\n' && rm -f ${fd_fifo_rivales_muertos} ${fd_fifo_server} 2>/dev/null
+    if ${modoUSA}; then
+        [[ `ls "${working_dir}"/fifo_server.* 2>/dev/null | wc -l` -eq 0 ]] && rm -f ${compatriotas}
+    fi
 
     exit $1
 }
@@ -109,24 +112,27 @@ function atacar(){
 
     #Actualizo la lista de rivales
     while read -t 0.01 muerto; do
-        if ! $modoUSA; then
-            printf "\rBorrando a \"${rivales_nombres[${muerto}]}\" de mi lista de ataque\r\n\n"
-        fi
+        printf "\rBorrando a \"${rivales_nombres[${muerto}]}\" de mi lista de ataque\r\n\n"
         rivales_vivos=`sed -e "s/ \+ / /g" <<<${rivales_vivos/${muerto}}`
     done <>${fd_fifo_rivales_muertos} #Abro el pipe en modo rw asi no es un request bloqueante
     
-    #Si estamos en modoUSA, esperamos que todos los demas procesos 
-    #esten listos para atacar sin atacarnos a nosotros
-    if $modoUSA; then
-        echo "Esperando a nuestros compatriotas: `echo $pids_USA | wc -w`"
-        wait $pids_USA
-        modoUSA=false
-    fi
-
     #Busco alguien vivo a quien atacar
     pos=""
     until [ ! -z "$pos" ] || [ -z "`tr -d [:space:] <<<${rivales_vivos}`" ]; do
         target_id="`shuf -e $rivales_vivos -n 1`"
+        
+        #Si estamos en modoUSA, verificamos que no sea un compatriota
+        if ${modoUSA}; then
+            until [ `grep -wc "${target_id}" ${compatriotas}` -eq 0 ] || \
+                  [ -z "`tr -d [:space:] <<<${rivales_vivos}`" ]; do
+                rivales_vivos=`sed -e "s/ \+ / /g" <<<${rivales_vivos/${target_id}}`
+                target_id="`shuf -e $rivales_vivos -n 1`"
+            done
+
+            #Si no hay mas rivales no-compatriotas salgo dejo de buscar enemigos
+            [[ -z "$target_id" ]] && break
+        fi
+
         read -d ' ' pos <<<${rivales_pos[${target_id}]}
 
         #Si no hay posiciones, ya lo ataque todo
@@ -358,6 +364,14 @@ function start_batalla(){
     if ! ${game_started}; then
         game_started=true
 
+        #Verificamos el modoUSA (los robots no se atacan entre si)
+        if ${modoUSA}; then
+            echo "#=====================#"
+            echo "|  Modo USA activado. |"
+            echo "#=====================#"
+            echo "$jugador_id" >>${compatriotas}
+        fi
+
         #Reunimos informacion para atacar rivales
         posiciones_xy=""
         for ((x=0;x<${2};x++)); do
@@ -375,16 +389,6 @@ function start_batalla(){
             rivales_nombres[${i}]=`jshon -e${i} -eName -u <<<$1`
             rivales_pos[${i}]=" `shuf -e $posiciones_xy`"
         done
-
-        #Verificamos el modoUSA (los robots no se atacan entre si)
-        if ${modoUSA}; then
-            echo "Modo USA activado."
-            pids_USA=""
-            for rival in `ls ${working_dir}/fifo_rivales_muertos.* `; do
-                echo "${jugador_id}" >${rival} &
-                pids_USA+="$! "
-            done
-        fi
 
         #Iniciamos el ataque
         for ((i=3;i>0;i--)); do
@@ -587,7 +591,7 @@ function atender(){
 trap "cleanup $ERROR_CTRL_SIG" INT TERM QUIT
 
 #Limpiamos el log viejo si existe
-#echo "" >${comlog}
+[[ -f ${comlog} ]] && rm -f ${comlog} 2>/dev/null
 
 #Asumimos que el server esta corriendo y nos conectamos
 #con el netcat de manera tal de poder mandar comandos 

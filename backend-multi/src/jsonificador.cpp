@@ -96,20 +96,20 @@ std::string Jsonificador::player_info(int id) {
 	int st;
 	Casilla * cas;
 	ss << "{ \"Name\": \"Player_Info\", \"Data\": {\"t_id\": "<< id <<", \"board\": [";
-	for (int i = 0; i < tamanio_tablero; i++) {
-		if (i != 0) { ss << ","; }
-		ss << "[";
-		for (int j = 0; j < tamanio_tablero; j++) {
-			if (j != 0) { ss << ","; }
-			cas = &tab->casillas[tab->traducir_cord(i, j)];
-			st = cas->dameEstado();
-			if (cas->dameEstado() == CASILLA_ESTADO_TOCADO) {
-				st = cas->dameResultado();
-			}
-			ss << '"' << traducir_estado_casilla(st) << '"';
-		}
-		ss << "]";
-	}
+    for (int i = 0; i < tamanio_tablero; i++) {
+        if (i != 0) { ss << ","; }
+        ss << "[";
+        for (int j = 0; j < tamanio_tablero; j++) {
+            if (j != 0) { ss << ","; }
+            cas = &tab->casillas[tab->traducir_cord(i, j)];
+            st = cas->dameEstado();
+            if (cas->dameEstado() == CASILLA_ESTADO_TOCADO) {
+                st = cas->dameResultado();
+            }
+            ss << '"' << traducir_estado_casilla(st) << '"';
+        }
+        ss << "]";
+    }
 
 	ss <<"]}}|";
 
@@ -183,27 +183,38 @@ std::string Jsonificador::traducir_estado_casilla(int estado) {
 
 
 std::string Jsonificador::scores() {
-	std::stringstream ss;
-	ss << "{ \"Name\": \"Scores\", \"Data\": [";
-	bool primero = true;
-	for (int i = 0; i < max_jugadores; i++) {
-        	this->modelo->rwl_jugadores->rlock();
-            	this->modelo->rwl_locks->rlock();
-		this->modelo->locks[i]->rwl_jugadores->rlock();
-		if (this->modelo->jugadores[i]!= NULL) {
-			if (!primero) {
-				ss << ",";
-			}
-			ss << "{\"Id\":" << i << ", \"Name\": \""<< this->modelo->jugadores[i]->dame_nombre() << "\", \"Score\":" <<
-			this->modelo->jugadores[i]->dame_puntaje() << ", \"Vivo\":" << (this->modelo->jugadores[i]->esta_vivo() ? 1 : 0) << "}";
-			if (primero) {
-				primero = false;
-			}
-		}
-		this->modelo->locks[i]->rwl_jugadores->runlock();
-            	this->modelo->rwl_locks->runlock();
-        	this->modelo->rwl_jugadores->runlock();
-	}
-	ss << "]}|";
-	return ss.str();
+    //Variables locales
+    std::stringstream ss;
+    bool primero = true;
+
+    //Pido locks
+    this->modelo->rwl_jugadores->rlock();
+    this->modelo->rwl_locks->rlock();
+
+    ss << "{ \"Name\": \"Scores\", \"Data\": [";
+    for (int i = 0; i < max_jugadores; i++) {
+        if (this->modelo->jugadores[i]!= NULL) {
+            //Pido lock del usuario
+            this->modelo->locks[i]->rwl_jugadores->rlock();
+
+            if (!primero) {
+                ss << ",";
+            }
+            ss << "{\"Id\":" << i << ", \"Name\": \""<< this->modelo->jugadores[i]->dame_nombre() << "\", \"Score\":" <<
+            this->modelo->jugadores[i]->dame_puntaje() << ", \"Vivo\":" << (this->modelo->jugadores[i]->esta_vivo() ? 1 : 0) << "}";
+            if (primero) {
+                primero = false;
+            }
+
+            //Suelto locks
+            this->modelo->locks[i]->rwl_jugadores->runlock();
+        }
+    }
+    ss << "]}|";
+
+    //Suelto locks
+    this->modelo->rwl_locks->runlock();
+    this->modelo->rwl_jugadores->runlock();
+
+    return ss.str();
 }
