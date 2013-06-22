@@ -133,24 +133,35 @@ std::string Decodificador::shoot() {
 
 
 std::string Decodificador::get_update() {
+    //Variables locales
+    string retorno = "OK";
 	int s_id = this->root["Data"]["s_id"].asInt();
+
+    //Comienzo
 	evento_t * evento = this->modelo->actualizar_jugador(s_id);
 	if (evento != NULL) {
-		string retorno = this->jsonificador->update(evento);
+		//string retorno = this->jsonificador->update(evento);
+		retorno = this->jsonificador->update(evento);
 		free(evento);
-		return retorno;
+		//return retorno;
 	}
-	return "OK";
+
+    //Terminamos
+    return retorno;
 }
 
 std::string Decodificador::encodeEvent(int s_id) {
+    //Variables locales
+    string retorno = "";
+
+    //Comienzo
 	evento_t * evento = this->modelo->dameEvento(s_id);
 	if (evento != NULL) {
-		string retorno = this->jsonificador->update(evento);
+		retorno = this->jsonificador->update(evento);
 		free(evento);
-		return retorno;
 	}
-	return "";
+
+    return retorno;
 }
 
 std::string Decodificador::unsubscribe() {

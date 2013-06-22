@@ -1,7 +1,7 @@
 #include <modelo.h>
-//#ifdef DEBUG
+#ifdef DEBUG
 #include <cstdio>
-//#endif
+#endif
 #include <constantes.h>
 #include <globales.h>
 #include <stdlib.h>
@@ -31,7 +31,7 @@ Modelo::Modelo(const int njugadores, const int tamtablero, const int tamtotalbar
 	for (int i = 0; i < max_jugadores; i++) {
 		this->jugadores[i] = NULL;
 		this->tiros[i] = NULL;
-        this->locks[i] = new Modelo::locks_t(); //NULL;
+		this->locks[i] = new Modelo::locks_t();
 	}
 	this->cantidad_jugadores = 0;
 	this->jugando = false;
@@ -43,6 +43,7 @@ Modelo::Modelo(const int njugadores, const int tamtablero, const int tamtotalbar
     this->rwl_locks = new RWLock();
     this->rwl_jugando = new RWLock();
     this->rwl_cantidad_jugadores = new RWLock();
+
 }
 
 Modelo::~Modelo() {
@@ -87,7 +88,6 @@ int Modelo::agregarJugador(std::string nombre) {
             this->rwl_cantidad_jugadores->wlock();
             this->rwl_tiros->wlock();
             this->rwl_locks->wlock();
-            //this->locks[nuevoid] = new Modelo::locks_t();
             this->locks[nuevoid]->rwl_tiros->wlock();
 
             //Registro al jugador
@@ -302,10 +302,6 @@ error Modelo::reiniciar() {
 			this->tiros[i]->stamp.tv_usec = 0;
 			this->tiros[i]->eta = 0;
 			this->tiros[i]->estado = TIRO_LIBRE;
-
-            //Suelto el write lock del jugador
-            //this->locks[i]->rwl_tiros->wunlock();
-            //this->locks[i]->rwl_jugadores->wunlock();
 		}
 	}
 	this->jugando = false;
@@ -502,12 +498,16 @@ int Modelo::dame_eta(int s_id) {
 	return retorno;
 }
 
+//Los locks comentados no son necesarios,
+//pues la funcion "tocar" es solamente invocada
+//por "actualizar_jugador", y la misma ya
+//pide los locks necesarios.
 int Modelo::tocar(int s_id, int t_id) {
     //Variables locales
     int retorno = -ERROR_ETA_NO_TRANSCURRIDO;
 
     //Pido locks iniciales
-    this->rwl_jugando->rlock();
+    //this->rwl_jugando->rlock();
 
     //Comenzamos
 	if(!this->jugando)
@@ -515,19 +515,19 @@ int Modelo::tocar(int s_id, int t_id) {
 
 	else {
         //Pido locks
-        this->rwl_jugadores->rlock();
+        //this->rwl_jugadores->rlock();
 
         if(this->jugadores[s_id] == NULL || this->jugadores[t_id] == NULL)
             retorno = -ERROR_JUGADOR_INEXISTENTE;
 
         else{
             //Pido locks
-            this->rwl_tiros->rlock();
-            this->rwl_eventos->rlock();
-            this->rwl_locks->rlock();
-            this->locks[s_id]->rwl_jugadores->wlock();
-            this->locks[s_id]->rwl_tiros->wlock();
-            this->locks[s_id]->rwl_eventos->wlock();
+            //this->rwl_tiros->rlock();
+            //this->rwl_eventos->rlock();
+            //this->rwl_locks->rlock();
+            //this->locks[s_id]->rwl_jugadores->wlock();
+            //this->locks[s_id]->rwl_tiros->wlock();
+            //this->locks[s_id]->rwl_eventos->wlock();
             this->locks[t_id]->rwl_jugadores->wlock();
             this->locks[t_id]->rwl_eventos->wlock();
 
@@ -573,18 +573,18 @@ int Modelo::tocar(int s_id, int t_id) {
             //Suelto locks de esta instancia
             this->locks[t_id]->rwl_eventos->wunlock();
             this->locks[t_id]->rwl_jugadores->wunlock();
-            this->locks[s_id]->rwl_eventos->wunlock();
-            this->locks[s_id]->rwl_tiros->wunlock();
-            this->locks[s_id]->rwl_jugadores->wunlock();
-            this->rwl_locks->runlock();
-            this->rwl_eventos->runlock();
-            this->rwl_tiros->runlock();
+            //this->locks[s_id]->rwl_eventos->wunlock();
+            //this->locks[s_id]->rwl_tiros->wunlock();
+            //this->locks[s_id]->rwl_jugadores->wunlock();
+            //this->rwl_locks->runlock();
+            //this->rwl_eventos->runlock();
+            //this->rwl_tiros->runlock();
         }
         //Suelto locks de esta instancia
-        this->rwl_jugadores->runlock();
+        //this->rwl_jugadores->runlock();
     }
     //Suelto los locks iniciales
-    this->rwl_jugando->runlock();
+    //this->rwl_jugando->runlock();
 
 	return retorno;
 }
@@ -669,20 +669,18 @@ evento_t * Modelo::actualizar_jugador(int s_id) {
     evento_t *retorno = NULL;
 
     //Pedimos locks
+    this->rwl_jugando->rlock();
+    this->rwl_jugadores->rlock();
     this->rwl_tiros->rlock();
     this->rwl_eventos->rlock();
     this->rwl_locks->rlock();
-    this->locks[s_id]->rwl_tiros->rlock();
+    this->locks[s_id]->rwl_jugadores->wlock();
+    this->locks[s_id]->rwl_tiros->wlock();
+    this->locks[s_id]->rwl_eventos->wlock();
 
     //Comenzamos
-	//tiro_t * t = this->tiros[s_id];
     int t_id = this->tiros[s_id]->t_id;
-    this->locks[s_id]->rwl_tiros->runlock(); //Libero pues this->tocar lo necesitara
-	//int tocado = this->tocar(s_id, t->t_id);
 	int tocado = this->tocar(s_id, t_id);
-
-    //Pedimos locks
-    this->locks[s_id]->rwl_eventos->wlock();
 
     if(!this->eventos[s_id].empty()) {
         retorno = this->eventos[s_id].front();
@@ -698,9 +696,13 @@ evento_t * Modelo::actualizar_jugador(int s_id) {
 
     //Suelto locks
     this->locks[s_id]->rwl_eventos->wunlock();
+    this->locks[s_id]->rwl_tiros->wunlock();
+    this->locks[s_id]->rwl_jugadores->wunlock();
     this->rwl_locks->runlock();
     this->rwl_eventos->runlock();
     this->rwl_tiros->runlock();
+    this->rwl_jugadores->runlock();
+    this->rwl_jugando->runlock();
 
     return retorno;
 }

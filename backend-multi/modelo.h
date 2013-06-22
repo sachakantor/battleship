@@ -94,7 +94,6 @@ class Modelo {
         RWLock* rwl_cantidad_jugadores;
 
 		friend class	Jsonificador;					/* para poder acceder a los elementos */
-
 };
 
 

@@ -27,10 +27,10 @@
 #define MAX_JUGADORES 100
 #define MAX_CONTROLADORES 5
 
-/* Setea un socket como no bloqueante */
+//Setea un socket como no bloqueante
 int no_bloqueante(int fd) {
     int flags;
-    /* Toma los flags del fd y agrega O_NONBLOCK */
+    //Toma los flags del fd y agrega O_NONBLOCK
     if ((flags = fcntl(fd, F_GETFL, 0)) == -1 )
         flags = 0;
     return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
@@ -38,157 +38,218 @@ int no_bloqueante(int fd) {
 
 
 /* Variables globales del server */
-int sock, sock_controlador;							// Socket donde se escuchan las conexiones entrantes
-struct sockaddr_in name, name_controlador; //remote;	// Direcciones
-char buf[MAX_MSG_LENGTH];			// Buffer de recepción de mensajes
-int s[MAX_JUGADORES];				// Sockets de los jugadores
-int s_controladores[MAX_CONTROLADORES];		// Sockets de los controladores
-int ids[MAX_JUGADORES];				// Ids de los jugadores
-Modelo * model = NULL;				// Puntero al modelo del juego
-Decodificador *decoder  = NULL;		// Puntero al decodificador
-int n, tamanio, tamanio_barcos;     // Variables de configuracion del juego.
+struct sockaddr_in name_jugadores, name_controlador;// Direcciones
+int sock_jugadores, sock_controlador;               // Socket donde se escuchan las conexiones entrantes
+int s_jugadores[MAX_JUGADORES];                     // Sockets de los jugadores
+int s_controladores[MAX_CONTROLADORES];             // Sockets de los controladores
+int ids[MAX_JUGADORES];                             // Ids de los jugadores
+int n,tamanio,tamanio_barcos,port;                  // Variables de configuracion del juego.
+bool sale;                                          // Boleano para dejar de escuchar conexiones
+Modelo * model = NULL;                              // Puntero al modelo del juego
 
-
-/* Resetea el juego */
+//Resetea el juego
 void reset() {
-	if (model != NULL) {
-		delete model;
-	}
-	if (decoder != NULL) {
-		delete decoder;
-	}
+	if (model != NULL) delete model;
 	model = new Modelo(n, tamanio, tamanio_barcos);
-	decoder = new Decodificador(model);
 }
 
-/* Acepta todas las conexiones entrantes */
-
-/*void accept() {
-	int t;
-	for (int i = 0; i < n; i++) {
-		t = sizeof(remote);
-		if ((s[i] = accept(sock, (struct sockaddr*) &remote, (socklen_t*) &t)) == -1) {
-			perror("aceptando la conexión entrante");
-			exit(1);
-		}
-		ids[i] = -1;
-		int flag = 1;
-		setsockopt(s[i],            * socket affected *
-				IPPROTO_TCP,     * set option at TCP level *
-				TCP_NODELAY,     * name of option *
-				(char *) &flag,  * the cast is historical *
-				sizeof(int));    * length of option value *
-	}
-}*/
-
-
-/* Para anteder al controlador */
-void atender_controlador(int sock_i) {
-	int recibido;
-	std::string resp;
-	recibido = recv(s_controladores[sock_i], buf, MAX_MSG_LENGTH, 0);
-	if (recibido < 0) {
-		perror("Recibiendo ");
-	} else if (recibido > 0) {
-		buf[recibido]='\0';
-		char * pch = strtok(buf, "|");
-		while (pch != NULL) {
-			//Ejecutar y responder
-			resp = decoder->decodificar(pch);
-			send(s_controladores[sock_i],resp.c_str(), resp.length() +1, 0);
-            pch = strtok(NULL, "|");
-            pch = strtok(NULL, "|");
-		}
-	}
-}
-
-
-/* Para atender al i-esimo jugador */
-void atender_jugador(int i) {
-	int recibido;
-	std::string resp;
-	recibido = recv(s[i], buf, MAX_MSG_LENGTH, 0);
-	if (recibido < 0) {
-        printf("Indice recibido: %d\n",i);
+//Inicializamos los sockets de jugadores y controlador
+void inicializar_socket(int &sock,struct sockaddr_in &name,int port,int max_conn){
+    //Crear socket para los jugadores
+    sock = socket(AF_INET,SOCK_STREAM,0);
+    if (sock < 0) {
+        perror("abriendo socket");
         exit(1);
-		perror("Recibiendo ");
+    }
+    //Crear nombre, usamos INADDR_ANY para indicar que cualquiera puede enviar aquí.
+    name.sin_family = AF_INET;
+    name.sin_addr.s_addr = INADDR_ANY;
+    name.sin_port = htons(port);
+    if (bind(sock,(const struct sockaddr*)&name,sizeof(name))) {
+        perror("binding socket");
+        exit(1);
+    }
 
-	} else if (recibido > 0) {
-		buf[recibido]='\0';
-		// Separo los mensajes por el caracter |
-		char * pch = strtok(buf, "|");
-		while (pch != NULL) {
-
-			// No muestro por pantalla los NOP, son muchos
-			if (strstr(pch, "Nop") == NULL) {
-				printf("Recibido: %s\n", pch);
-			}
-
-			//Decodifico el mensaje y obtengo una respuesta
-			resp = decoder->decodificar(pch);
-
-			// Si no se cual es el ID de este jugador, trato de obtenerlo de la respuesta
-			if (ids[i] == -1) {
-				ids[i] = decoder->dameIdJugador(resp.c_str());
-			}
-
-			// Envio la respuesta
-			send(s[i],resp.c_str(), resp.length() +1, 0);
-
-			// No muestro por pantalla los NOP, son muchos
-			if (strstr(pch, "Nop") == NULL) {
-				printf("Resultado %s\n", resp.c_str());
-			}
-
-			// Si ya se cual es el jugador
-			if (ids[i] != -1) {
-				// Busco si hay eventos para enviar y los mando
-				int eventos = model->hayEventos(ids[i]);
-				if (eventos != 0) {
-					printf("Agregando %d eventos\n", eventos);
-				}
-				for (int ev = 0; ev < eventos; ev++) {
-					resp = decoder->encodeEvent(ids[i]);
-					printf("Enviando evento %s", resp.c_str());
-					send(s[i],resp.c_str(), resp.length() +1, 0);
-				}
-			}
-			pch = strtok(NULL, "|");
-		}
-	}
+    //Escuchar en el socket y permitir n conexiones en espera.
+    if (listen(sock,max_conn) == -1) {
+        perror("escuchando socket");
+        exit(1);
+    }
 }
 
-void* thread_func(void* i){
-    while(true) atender_jugador((int)
+
+//Para atender al i-esimo jugador
+void* atender_jugador(void* sock_like_ptr) {
+    //Casteamos el parametro a su valor correspondiente
+    int i = (int)
         #ifdef __x86_64__
             //En caso de que estemos en una pc de 64 bits, para que no tire errores
             //de distintos tamaños entre int y void*
             (long int)
         #endif
-        i);
+        sock_like_ptr;
+    int recibido;
+    std::string resp;
+    char buf[MAX_MSG_LENGTH]; // Buffer de recepción de mensajes
+    Decodificador* decoder  = new Decodificador(model);
+
+    //Comenzamos
+    while(true && !sale){
+        recibido = recv(s_jugadores[i], buf, MAX_MSG_LENGTH, 0);
+        if (recibido < 0) {
+            printf("Indice recibido: %d\n",i);
+            exit(1);
+            perror("Recibiendo ");
+
+        } else if (recibido > 0) {
+            buf[recibido]='\0';
+            // Separo los mensajes por el caracter |
+            char * pch = strtok(buf, "|");
+            while (pch != NULL) {
+
+                // No muestro por pantalla los NOP, son muchos
+                if (strstr(pch, "Nop") == NULL) {
+                    printf("Recibido: %s\n", pch);
+                }
+
+                //Decodifico el mensaje y obtengo una respuesta
+                resp = decoder->decodificar(pch);
+
+                // Si no se cual es el ID de este jugador, trato de obtenerlo de la respuesta
+                if (ids[i] == -1) {
+                    ids[i] = decoder->dameIdJugador(resp.c_str());
+                }
+
+                // Envio la respuesta
+                send(s_jugadores[i],resp.c_str(), resp.length() +1, 0);
+
+                // No muestro por pantalla los NOP, son muchos
+                if (strstr(pch, "Nop") == NULL) {
+                    printf("Resultado %s\n", resp.c_str());
+                }
+
+                // Si ya se cual es el jugador
+                if (ids[i] != -1) {
+                    // Busco si hay eventos para enviar y los mando
+                    int eventos = model->hayEventos(ids[i]);
+                    if (eventos != 0) {
+                        printf("Agregando %d eventos\n", eventos);
+                    }
+                    for (int ev = 0; ev < eventos; ev++) {
+                        resp = decoder->encodeEvent(ids[i]);
+                        printf("Enviando evento %s", resp.c_str());
+                        send(s_jugadores[i],resp.c_str(), resp.length() +1, 0);
+                    }
+                }
+                pch = strtok(NULL, "|");
+            }
+        }
+    }
+
+    delete decoder;
     return NULL;
 }
 
-void* thread_func_controlador(void* i_cont){
-    while(true) atender_controlador((int)
+//Acepta todas las conexiones entrantes de los jugadores
+void accept_jugadores() {
+    //Variables locales
+    int size_remote = sizeof(struct sockaddr_in);
+    pthread_t threads_jugadores[MAX_JUGADORES];
+
+    //Creamos el socket
+    inicializar_socket(sock_jugadores,name_jugadores,port,n);
+
+    //Comenzamos
+	for(unsigned int i=0;i<(unsigned int)n && !sale;++i){
+        struct sockaddr_in name_jugador; //Se genera uno distinto por cada conexion
+        s_jugadores[i] = accept(sock_jugadores,(struct sockaddr*)&name_jugador,(socklen_t*)&size_remote);
+        if (s_jugadores[i] == -1){
+            perror("aceptando la conexión entrante");
+            exit(1);
+        }
+
+        //Configuramos el socket recien creado
+        ids[i] = -1;
+        int flag = 1;
+        setsockopt(s_jugadores[i],        /* socket affected */
+                IPPROTO_TCP,    /* set option at TCP level */
+                TCP_NODELAY,    /* name of option */
+                (char *) &flag, /* the cast is historical */
+                sizeof(int));   /* length of option value */
+
+        //Creamos el thread con el socket s
+        //Notar que como el parametro de atender_jugador es (en verdad)
+        //un int, podemos pasarlo como si fuera un puntero en lugar de
+        //tener que pasarle un puntero a int (ya que sizeof(void*) == sizeof(int))
+        pthread_create(
+                &threads_jugadores[i],
+                NULL,
+                atender_jugador,
+                (void*)
+                    #ifdef __x86_64__
+                        //En caso de que estemos en una pc de 64 bits, para que no tire errores
+                        //de distintos tamaños entre int y void*
+                        (long)
+                    #endif
+                    i //se lo paso por copia, ya que despues otro thread lo incrementa
+        );
+	}
+
+    //Termino los jugadores y el socket de jugadores
+    for(unsigned int i=0;i<(unsigned int)n;++i){
+        pthread_join(threads_jugadores[i],NULL);
+        close(s_jugadores[i]);
+    }
+    close(sock_jugadores);
+}
+
+
+//Para anteder a los requests del controlador
+void* atender_controlador(void* sock_like_ptr) {
+    //Variables locales
+    int sock_i = (int)
         #ifdef __x86_64__
             //En caso de que estemos en una pc de 64 bits, para que no tire errores
             //de distintos tamaños entre int y void*
             (long int)
         #endif
-        i_cont);
-	return NULL;
+        sock_like_ptr;
+    char buf[MAX_MSG_LENGTH]; // Buffer de recepción de mensajes
+    int recibido;
+    std::string resp;
+    Decodificador* decoder  = new Decodificador(model);
+
+    //Comenzamos
+    while(true && !sale){
+        recibido = recv(s_controladores[sock_i],buf,MAX_MSG_LENGTH,0);
+        if (recibido < 0) {
+            perror("Recibiendo ");
+        } else if (recibido > 0) {
+            buf[recibido]='\0';
+            char * pch = strtok(buf, "|");
+            while (pch != NULL) {
+                //Ejecutar y responder
+                resp = decoder->decodificar(pch);
+                send(s_controladores[sock_i],resp.c_str(), resp.length() +1, 0);
+                pch = strtok(NULL, "|");
+            }
+        }
+    }
+
+    delete decoder;
+    return NULL;
 }
 
+//Thread que atiende las conexiones entrantes del controlador
+void* controller_manager(void*){
+    //Variables locales
+    int size_remote = sizeof(struct sockaddr_in);
+    int cant_controladores = 0;
+    pthread_t threads_controladores[MAX_CONTROLADORES]; // Array de threads de controladores
 
-void* controller_manager(void* param){
+    //Configuramos el socket
+    inicializar_socket(sock_controlador,name_controlador,CONTROLLER_PORT,MAX_CONTROLADORES);
 
-	int size_remote = sizeof(struct sockaddr_in);
-	bool sale = false;
-	//pthread_t thread_atencion_controlador;
-	int cant_controladores = 0;
-	pthread_t threads_controladores[MAX_CONTROLADORES];	
-	
     //Comenzamos a aceptar conexiones
     while(!sale && cant_controladores < MAX_CONTROLADORES){
         //Por cada iteracion, genero una nueva direccion para la conexion
@@ -196,33 +257,51 @@ void* controller_manager(void* param){
 
         //Por cada conexion recibida, configuramos un nuevo socket
         s_controladores[cant_controladores] = accept(sock_controlador,(struct sockaddr*)&remote_controlador,(socklen_t*)&size_remote);
-		if (s_controladores[cant_controladores] == -1) {
-			perror("aceptando la conexión entrante");
-		} else {
-	            //Configuramos el socket
-        	    int flag = 1;
-	            setsockopt(s_controladores[cant_controladores],    /* socket affected */
-                    IPPROTO_TCP,                    /* set option at TCP level */
-                    TCP_NODELAY,                    /* name of option */
-                    (char *) &flag,                 /* the cast is historical */
-                    sizeof(int));                   /* length of option value */
+        if (s_controladores[cant_controladores] == -1) {
+            perror("aceptando la conexión entrante de controlador");
+        } else {
+            //Configuramos el socket
+            int flag = 1;
+            setsockopt(s_controladores[cant_controladores],    /* socket affected */
+                IPPROTO_TCP,                    /* set option at TCP level */
+                TCP_NODELAY,                    /* name of option */
+                (char *) &flag,                 /* the cast is historical */
+                sizeof(int));                   /* length of option value */
 
-        	    //Creamos el thread
-	            pthread_create(&threads_controladores[cant_controladores], NULL, thread_func_controlador, 
-                    (void*)
-                        #ifdef __x86_64__
-                            //En caso de que estemos en una pc de 64 bits, para que no tire errores
-                            //de distintos tamaños entre int y void*
-                            (long)
-                        #endif
-                        cant_controladores );
-			cant_controladores++;
-		}
-	}
-	return NULL;
+            //Creamos el thread con el socket
+            //Notar que como el parametro de atender_jugador es (en verdad)
+            //un int, podemos pasarlo como si fuera un puntero en lugar de
+            //tener que pasarle un puntero a int (ya que sizeof(void*) == sizeof(int))
+            pthread_create(&threads_controladores[cant_controladores],
+                NULL,
+                atender_controlador,
+                (void*)
+                    #ifdef __x86_64__
+                        //En caso de que estemos en una pc de 64 bits, para que no tire errores
+                        //de distintos tamaños entre int y void*
+                        (long)
+                    #endif
+                    cant_controladores);
+
+            cant_controladores++;
+        }
+    }
+
+    //Termino los controladores y el socket de controladores
+    for(unsigned int i=0;i<(unsigned int)n;++i){
+        pthread_join(threads_controladores[i],NULL);
+        close(s_controladores[i]);
+    }
+    close(sock_controlador);
+
+    //Termino
+    return NULL;
 }
 
 
+/**********************************************/
+/******************* MAIN *********************/
+/**********************************************/
 /*
  * Recibe 4 parametros:
  * argv[1]: Puerto
@@ -233,154 +312,34 @@ void* controller_manager(void* param){
 int main(int argc, char * argv[]) {
     //Variables locales
     int return_code = 0;
+    sale=false;
+    pthread_t thread_controlador;
 
     //Comenzamos
-	if (argc < 5) {
-		printf("Faltan parametros\n");
-		printf("Se espera ./server puerto jugadores tamanio_tablero tamanio_barcos\n");
-		exit(1);
-	}
-	int port = atoi(argv[1]);
-	n = atoi(argv[2]);
-	tamanio = atoi(argv[3]);
-	tamanio_barcos = atoi(argv[4]);
+    if (argc < 5) {
+        printf("Faltan parametros\n");
+        printf("Se espera ./server puerto jugadores tamanio_tablero tamanio_barcos\n");
+        exit(1);
+    }
+    port = atoi(argv[1]);
+    n = atoi(argv[2]);
+    tamanio = atoi(argv[3]);
+    tamanio_barcos = atoi(argv[4]);
 
-	inicializar();
-	int port_controlador = CONTROLLER_PORT;
+    inicializar();
 
+    printf("Escuchando en el puerto %d - controlador en %d\n", port, CONTROLLER_PORT);
+    printf("Jugadores %d - Tamanio %d - Tamanio Barcos %d\n", n, tamanio, tamanio_barcos);
+    reset();
 
-	printf("Escuchando en el puerto %d - controlador en %d\n", port, port_controlador);
-	printf("Jugadores %d - Tamanio %d - Tamanio Barcos %d\n", n, tamanio, tamanio_barcos);
-	reset();
+    printf("Corriendo...\n");
 
-	/*	Comienza inicializacion del socket para el controlador	*/
-	sock_controlador = socket(AF_INET, SOCK_STREAM, 0);
-	if (sock_controlador < 0) {
-		perror("abriendo socket");
-		exit(1);
-	}
-	//struct sockaddr_in name_controlador; //LO AGREGE AL MERGEAR PUES NO SABIA PORQUE NO IBA
-	/* Crear nombre, usamos INADDR_ANY para indicar que cualquiera puede enviar aquí. */
-	name_controlador.sin_family = AF_INET;
-	name_controlador.sin_addr.s_addr = INADDR_ANY;
-	name_controlador.sin_port = htons(port_controlador);
-	if (bind(sock_controlador, (const struct sockaddr*) &name_controlador, sizeof(name_controlador))) {
-		perror("binding socket");
-		exit(1);
-	}
+    //Creamos el thread que va a escuchar y crear un thread para cada comunicacion del controlador
+    pthread_create(&thread_controlador,NULL,controller_manager,NULL);
 
-	/* Escuchar en el socket y permitir MAX_CONTROLADORES conexion en espera. */
-	if (listen(sock_controlador, MAX_CONTROLADORES) == -1) {
-		perror("escuchando");
-		exit(1);
-	}
+    //Comenzamos a aceptar jugadores
+    accept_jugadores();
 
-	pthread_t thread_controlador;
-	//Creamos el thread que va a escuchar y crear un thread para cada comunicacion
-	pthread_create(&thread_controlador, NULL, controller_manager, NULL);
-	
-	/*	Finaliza inicializacion del socket para el controlador	*/
-
-	/* Crear socket sobre el que se lee: dominio INET, protocolo TCP (STREAM). */
-	sock = socket(AF_INET, SOCK_STREAM, 0);
-	if (sock < 0) {
-		perror("abriendo socket");
-		exit(1);
-	}
-	/* Crear nombre, usamos INADDR_ANY para indicar que cualquiera puede enviar aquí. */
-	name.sin_family = AF_INET;
-	name.sin_addr.s_addr = INADDR_ANY;
-	name.sin_port = htons(port);
-	if (bind(sock, (const struct sockaddr*) &name, sizeof(name))) {
-		perror("binding socket");
-		exit(1);
-	}
-
-	/* Escuchar en el socket y permitir n conexiones en espera. */
-	if (listen(sock, n) == -1) {
-		perror("escuchando");
-		exit(1);
-	}
-
-	//accept();
-
-
-	printf("Corriendo...\n");
-
-/*==================================================*/
-
-    //Variables locales
-    //int sock_new; // Socket temporal para atender por threads
-    int cant_conex_aceptadas = 0;
-    int size_remote = sizeof(struct sockaddr_in);
-    pthread_t threads[MAX_JUGADORES];
-    bool sale = false;
-
-    //Comenzamos a aceptar conexiones
-    while(!sale){
-        //Por cada iteracion, genero una nueva direccion para la conexion
-        struct sockaddr_in remote;
-
-        //Por cada conexion recibida, configuramos un nuevo socket
-        s[cant_conex_aceptadas] = accept(sock,(struct sockaddr*)&remote,(socklen_t*)&size_remote);
-		if (s[cant_conex_aceptadas] == -1) {
-			perror("aceptando la conexión entrante");
-			return_code = 1;
-		} else {
-            //Configuramos el socket
-            ids[cant_conex_aceptadas] = -1;
-            int flag = 1;
-            setsockopt(s[cant_conex_aceptadas],     /* socket affected */
-                    IPPROTO_TCP,                    /* set option at TCP level */
-                    TCP_NODELAY,                    /* name of option */
-                    (char *) &flag,                 /* the cast is historical */
-                    sizeof(int));                   /* length of option value */
-
-            //Creamos el thread
-            pthread_create(
-                    &threads[cant_conex_aceptadas],
-                    NULL,
-                    thread_func,
-                    (void*)
-                        #ifdef __x86_64__
-                            //En caso de que estemos en una pc de 64 bits, para que no tire errores
-                            //de distintos tamaños entre int y void*
-                            (long)
-                        #endif
-                        cant_conex_aceptadas //se lo paso por copia, ya que despues otro thread lo incrementa
-            );
-
-            //Incrementamos el contador de conexiones ya aceptadas
-            cant_conex_aceptadas++;
-        }
-	}
-
-
-
-/*==================================================*/
-
-/*
-	bool sale = false;
-	while (!sale) {
-		fd_set readfds;
-		FD_ZERO(&readfds);
-		for (int i = 0; i < n; i++) {
-			FD_SET(s[i], &readfds);
-		}
-		select(s[n-1]+1, &readfds, NULL, NULL, NULL);
-
-		for (int i = 0; i < n; i++) {
-			if (FD_ISSET(s[i], &readfds)) {
-				atender_jugador(i);
-			}
-		}
-
-	}
-*/
-	for (int i = 0; i < cant_conex_aceptadas; i++) {
-		close(s[i]);
-	}
-
-	close(sock);
+    //Termino
 	return return_code;
 }

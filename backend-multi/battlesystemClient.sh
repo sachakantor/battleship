@@ -14,11 +14,14 @@ ERROR_CTRL_SIG=100
 
 #Variables
 return_code=$ERROR_NO_ERROR
-working_dir="${PWD}"
+working_dir="."
 host="${1}"
 port="${2}"
 jugador_nombre="${3}"
 game_started=false
+#comlog="${working_dir}/battlesystemClient.`tr -d [:space:] <<<${jugador_nombre}`.$$.log"
+modoUSA=false
+pids_USA=""
 
 #Variables que se iran cargando
 #al parsear las respuestas del server
@@ -83,7 +86,6 @@ mkfifo $fd_fifo_rivales_muertos
 function cleanup(){
     #$1= return code
     #Si hubo un error
-    #[[ "$1" -ne "$ERROR_NO_ERROR" && "$1" -ne "$ERROR_CTRL_SIG" ]]  && echo "Salida inesperada con error: $1"
 
     #Borramos fifos y matamos procesos del background
     printf '\r\vCerrando procesos hijos\r\n' && pkill -P $$ 2>/dev/null
@@ -94,7 +96,8 @@ function cleanup(){
 }
 
 function send_cmd(){
-    #echo -e "{\"Name\":\"${1}\",\"Data\":${2}}|\c" >&${fd_input_server}
+    #Logueamos el comando a enviar siempre que no sea un Nop
+    #[[ "${1}" != "${nop}" ]] && echo "Enviando: {\"Name\":\"${1}\",\"Data\":${2}}|" >>${comlog}
     printf "{\"Name\":\"${1}\",\"Data\":${2}}|" >&${fd_input_server}
 
     return $?
@@ -106,10 +109,19 @@ function atacar(){
 
     #Actualizo la lista de rivales
     while read -t 0.01 muerto; do
-        echo "Borrando a \"${rivales_nombres[${muerto}]}\" de mi lista de ataque"
-        echo ""
-        rivales_vivos=${rivales_vivos/${muerto}/}
+        if ! $modoUSA; then
+            printf "\rBorrando a \"${rivales_nombres[${muerto}]}\" de mi lista de ataque\r\n\n"
+        fi
+        rivales_vivos=`sed -e "s/ \+ / /g" <<<${rivales_vivos/${muerto}}`
     done <>${fd_fifo_rivales_muertos} #Abro el pipe en modo rw asi no es un request bloqueante
+    
+    #Si estamos en modoUSA, esperamos que todos los demas procesos 
+    #esten listos para atacar sin atacarnos a nosotros
+    if $modoUSA; then
+        echo "Esperando a nuestros compatriotas: `echo $pids_USA | wc -w`"
+        wait $pids_USA
+        modoUSA=false
+    fi
 
     #Busco alguien vivo a quien atacar
     pos=""
@@ -118,7 +130,7 @@ function atacar(){
         read -d ' ' pos <<<${rivales_pos[${target_id}]}
 
         #Si no hay posiciones, ya lo ataque todo
-        [[ -z "$pos" ]] && rivales_vivos=${rivales_vivos/${target_id}/}
+        [[ -z "$pos" ]] && rivales_vivos=${rivales_vivos/${target_id}}
     done
 
     #Si encontre un rival vivo, ataco, sino gane
@@ -130,7 +142,7 @@ function atacar(){
         y=`cut -d',' -f2 <<<${pos}`
 
         #Elimino a la posicion que voy a atacar
-        rivales_pos[${target_id}]=${rivales_pos[${target_id}]/${pos}/}
+        rivales_pos[${target_id}]=${rivales_pos[${target_id}]/${pos}}
         
         #Ataco
         echo "Atacando a ${rivales_nombres[${target_id}]}: x=${x},y=${y}"
@@ -266,7 +278,7 @@ function cargar_botes(){
 
                 #Eliminamos las zonas del barco y aledanas
                 for i in $posiciones_a_quitar; do
-                    posiciones_xy_disponibles=${posiciones_xy_disponibles/${i}/}
+                    posiciones_xy_disponibles=${posiciones_xy_disponibles/${i}}
                 done
 
                 #Pasamos al siguiente barco (la coma la debemos borrar despues)
@@ -303,35 +315,30 @@ function subscribe(){
         if [ $casilleros_tot -ge 5 ]; then
             let boats_cinco++
             let boats_cant++
-            #boats_cinco=$((${boats_cinco}+1))
             casilleros_tot=$((${casilleros_tot}-5))
         fi
 
         if [ $casilleros_tot -ge 4 ]; then
             let boats_cuatro++
             let boats_cant++
-            #boats_cuatro=$((${boats_cuatro}+1))
             casilleros_tot=$((${casilleros_tot}-4))
         fi
 
         if [ $casilleros_tot -ge 3 ]; then
             let boats_tres++
             let boats_cant++
-            #boats_tres=$((${boats_tres}+1))
             casilleros_tot=$((${casilleros_tot}-3))
         fi
 
         if [ $casilleros_tot -ge 2 ]; then
             let boats_dos++
             let boats_cant++
-            #boats_dos=$((${boats_dos}+1))
             casilleros_tot=$((${casilleros_tot}-2))
         fi
 
         if [ $casilleros_tot -ge 1 ]; then
             let boats_uno++
             let boats_cant++
-            #boats_uno=$((${boats_uno}+1))
             casilleros_tot=$((${casilleros_tot}-1))
         fi
     done
@@ -360,13 +367,24 @@ function start_batalla(){
         done
 
         rivales_cant=`jshon -l <<<$1`
-        rivales_vivos="`seq 0 $((${rivales_cant}-1)) | tr -d ${jugador_id}`"
+        rivales_vivos=`seq -s' ' 0 $((${rivales_cant}-1))`
+        rivales_vivos=${rivales_vivos/${jugador_id}}
 
         #Arrays con los nombres y posiciones shuffleadas a atacar
         for((i=0;i < ${rivales_cant};i++)); do
             rivales_nombres[${i}]=`jshon -e${i} -eName -u <<<$1`
             rivales_pos[${i}]=" `shuf -e $posiciones_xy`"
         done
+
+        #Verificamos el modoUSA (los robots no se atacan entre si)
+        if ${modoUSA}; then
+            echo "Modo USA activado."
+            pids_USA=""
+            for rival in `ls ${working_dir}/fifo_rivales_muertos.* `; do
+                echo "${jugador_id}" >${rival} &
+                pids_USA+="$! "
+            done
+        fi
 
         #Iniciamos el ataque
         for ((i=3;i>0;i--)); do
@@ -568,11 +586,14 @@ function atender(){
 #Atrapamos el ctrl+c
 trap "cleanup $ERROR_CTRL_SIG" INT TERM QUIT
 
+#Limpiamos el log viejo si existe
+#echo "" >${comlog}
+
 #Asumimos que el server esta corriendo y nos conectamos
 #con el netcat de manera tal de poder mandar comandos 
 #mediante las redirecciones a los fds
 exec {fd_output_server}<>${fd_fifo_server} #uso el fd_output_server para leer del server
-exec {fd_input_server}> >(netcat $host $port >&${fd_output_server}) #uso el fd_input_server para escribir al server
+exec {fd_input_server}> >(netcat $host $port >&${fd_output_server} 2>/dev/null) #>>${comlog}) #uso el fd_input_server para escribir al server
 
 #Nos inscribimos
 send_cmd "$subscribe" "{\"Name\":\"${jugador_nombre}\"}"
@@ -580,10 +601,11 @@ send_cmd "$subscribe" "{\"Name\":\"${jugador_nombre}\"}"
 #Actuamos segun las respuestas del server
 xargs --no-run-if-empty --null -E '\200' -Iresp echo resp <&${fd_output_server} 2>/dev/null | \
     while read -d '|' resp; do 
-        #echo "Recibido: ${resp}"
+        resp=$(tr -c -d [:print:] <<<$resp)
+        #echo "Recibido: ${resp}" >>${comlog}
         atender "$resp"
         return_code=$?
-        [[ $return_code -ne $ERROR_NO_ERROR ]] && pkill -P $$ "xargs"  #&& break
+        [[ $return_code -ne $ERROR_NO_ERROR ]] && pkill -P $$ "xargs"
     done
 
 #Limpiamos

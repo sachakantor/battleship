@@ -15,7 +15,6 @@ Jsonificador::~Jsonificador() {
 
 }
 
-
 std::string Jsonificador::subscribe_resp(int id) {
 	std::stringstream ss;
 	ss << "{\"Name\":\"Subscribe\",\"Data\":{";
@@ -158,8 +157,6 @@ std::string Jsonificador::finish(void) {
 	ss << "|";
 	return ss.str();
 }
-
-
 
 std::string Jsonificador::traducir_estado_casilla(int estado) {
 	std::string retorno = "";
