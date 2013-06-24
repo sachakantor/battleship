@@ -88,7 +88,6 @@ class Modelo {
         //Read Write Locks (de paranoico)
         RWLock* rwl_jugadores;
         RWLock* rwl_tiros;
-        RWLock* rwl_eventos;
         RWLock* rwl_locks;
         RWLock* rwl_jugando;
         RWLock* rwl_cantidad_jugadores;

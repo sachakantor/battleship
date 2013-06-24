@@ -160,18 +160,18 @@ void accept_jugadores() {
     inicializar_socket(sock_jugadores,name_jugadores,port,n);
 
     //Comenzamos
-	for(unsigned int i=0;i<(unsigned int)n && !sale;++i){
+	for(unsigned int cant_conex_jug=0;cant_conex_jug<(unsigned int)n && !sale;++cant_conex_jug){
         struct sockaddr_in name_jugador; //Se genera uno distinto por cada conexion
-        s_jugadores[i] = accept(sock_jugadores,(struct sockaddr*)&name_jugador,(socklen_t*)&size_remote);
-        if (s_jugadores[i] == -1){
+        s_jugadores[cant_conex_jug] = accept(sock_jugadores,(struct sockaddr*)&name_jugador,(socklen_t*)&size_remote);
+        if (s_jugadores[cant_conex_jug] == -1){
             perror("aceptando la conexión entrante");
             exit(1);
         }
 
         //Configuramos el socket recien creado
-        ids[i] = -1;
+        ids[cant_conex_jug] = -1;
         int flag = 1;
-        setsockopt(s_jugadores[i],        /* socket affected */
+        setsockopt(s_jugadores[cant_conex_jug],        /* socket affected */
                 IPPROTO_TCP,    /* set option at TCP level */
                 TCP_NODELAY,    /* name of option */
                 (char *) &flag, /* the cast is historical */
@@ -182,7 +182,7 @@ void accept_jugadores() {
         //un int, podemos pasarlo como si fuera un puntero en lugar de
         //tener que pasarle un puntero a int (ya que sizeof(void*) == sizeof(int))
         pthread_create(
-                &threads_jugadores[i],
+                &threads_jugadores[cant_conex_jug],
                 NULL,
                 atender_jugador,
                 (void*)
@@ -191,7 +191,7 @@ void accept_jugadores() {
                         //de distintos tamaños entre int y void*
                         (long)
                     #endif
-                    i //se lo paso por copia, ya que despues otro thread lo incrementa
+                    cant_conex_jug //se lo paso por copia, ya que despues otro thread lo incrementa
         );
 	}
 
@@ -244,25 +244,24 @@ void* atender_controlador(void* sock_like_ptr) {
 void* controller_manager(void*){
     //Variables locales
     int size_remote = sizeof(struct sockaddr_in);
-    int cant_controladores = 0;
     pthread_t threads_controladores[MAX_CONTROLADORES]; // Array de threads de controladores
 
     //Configuramos el socket
     inicializar_socket(sock_controlador,name_controlador,CONTROLLER_PORT,MAX_CONTROLADORES);
 
     //Comenzamos a aceptar conexiones
-    while(!sale && cant_controladores < MAX_CONTROLADORES){
+    for(unsigned int cant_conex_ctrls=0;cant_conex_ctrls<MAX_CONTROLADORES && !sale;++cant_conex_ctrls){
         //Por cada iteracion, genero una nueva direccion para la conexion
         struct sockaddr_in remote_controlador;
 
         //Por cada conexion recibida, configuramos un nuevo socket
-        s_controladores[cant_controladores] = accept(sock_controlador,(struct sockaddr*)&remote_controlador,(socklen_t*)&size_remote);
-        if (s_controladores[cant_controladores] == -1) {
+        s_controladores[cant_conex_ctrls] = accept(sock_controlador,(struct sockaddr*)&remote_controlador,(socklen_t*)&size_remote);
+        if (s_controladores[cant_conex_ctrls] == -1) {
             perror("aceptando la conexión entrante de controlador");
         } else {
             //Configuramos el socket
             int flag = 1;
-            setsockopt(s_controladores[cant_controladores],    /* socket affected */
+            setsockopt(s_controladores[cant_conex_ctrls],    /* socket affected */
                 IPPROTO_TCP,                    /* set option at TCP level */
                 TCP_NODELAY,                    /* name of option */
                 (char *) &flag,                 /* the cast is historical */
@@ -272,7 +271,7 @@ void* controller_manager(void*){
             //Notar que como el parametro de atender_jugador es (en verdad)
             //un int, podemos pasarlo como si fuera un puntero en lugar de
             //tener que pasarle un puntero a int (ya que sizeof(void*) == sizeof(int))
-            pthread_create(&threads_controladores[cant_controladores],
+            pthread_create(&threads_controladores[cant_conex_ctrls],
                 NULL,
                 atender_controlador,
                 (void*)
@@ -281,9 +280,7 @@ void* controller_manager(void*){
                         //de distintos tamaños entre int y void*
                         (long)
                     #endif
-                    cant_controladores);
-
-            cant_controladores++;
+                    cant_conex_ctrls);
         }
     }
 
@@ -339,6 +336,9 @@ int main(int argc, char * argv[]) {
 
     //Comenzamos a aceptar jugadores
     accept_jugadores();
+
+    //Esperamos que termine el thread de los controladores
+    pthread_join(thread_controlador,NULL);
 
     //Termino
 	return return_code;
