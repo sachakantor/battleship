@@ -1,0 +1,22 @@
+CC = g++
+#CFLAGS=-g -Wall -Werror 
+CFLAGS=-g -Wall -std=c++98 -Werror -fno-stack-protector -I../include
+LDFLAGS=-pthread
+
+BINARY=test
+#JSONCPP=libs/jsoncpp/jsoncpp.a
+OBJECTS=RWLock.o
+
+.PHONY: clean all libs
+
+all: $(BINARY) test
+
+$(BINARY): rwlock_tests.cpp $(OBJECTS)
+	$(CC) $(LDFLAGS) $(CFLAGS) -o $@ $^
+
+%.o: %.cpp
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+clean:
+	rm -f $(OBJECTS)
+	rm -f $(BINARY)
